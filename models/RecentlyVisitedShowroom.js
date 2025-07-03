@@ -22,22 +22,22 @@ const RecentlyVisitedShowroomSchema = new mongoose.Schema({
   ],
 });
 
-// ✅ Safe + Limited to 5 + Prevent duplicates
+// Safe + Limited to 5 + Prevent duplicates
 RecentlyVisitedShowroomSchema.methods.addShowroom = async function (ownerId) {
   try {
-    // ✅ Filter out the showroom if already visited (null-safe)
+    // Filter out the showroom if already visited (null-safe)
     const updatedShowrooms = this.visitedShowrooms.filter(
       (visit) =>
         visit?.ownerId?.toString() !== ownerId.toString()
     );
 
-    // ✅ Add to top
+    // Add to top
     updatedShowrooms.unshift({ ownerId });
 
-    // ✅ Keep only latest 5
+    // Keep only latest 5
     const latestFive = updatedShowrooms.slice(0, 5);
 
-    // ✅ Update and save in DB
+    // Update and save in DB
     this.visitedShowrooms = latestFive;
     await this.save();
 

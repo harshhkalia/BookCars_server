@@ -2,11 +2,23 @@ import RecentlyVisitedShowroom from "../models/RecentlyVisitedShowroom.js";
 
 export const newVisit = async (req, res) => {
   try {
-    const customerId = req.user.userId;
+    const customerId = req.user?.userId;
     const { ownerId } = req.body;
 
+    if (!customerId) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Unauthorized: Invalid token" });
+    }
     if (!ownerId) {
-      return res.status(400).json({ message: "Owner ID is required." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Owner ID is required" });
+    }
+    if (!mongoose.Types.ObjectId.isValid(customerId) || !mongoose.Types.ObjectId.isValid(ownerId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid customer or owner ID" });
     }
 
     let showroom = await RecentlyVisitedShowroom.findOne({ customerId });
@@ -21,14 +33,20 @@ export const newVisit = async (req, res) => {
     }
 
     return res.status(200).json({
-      message: "Showroom visit saved successfully.",
+      success: true,
+      message: "Showroom visit saved successfully",
       visitedShowrooms: showroom.visitedShowrooms,
     });
   } catch (error) {
-    console.error("Failed to save history of visited showroom due to:", error);
+    console.error("Failed to save showroom visit:", error);
+    if (error.name === "ValidationError") {
+      return res
+        .status(400)
+        .json({ success: false, message: error.message });
+    }
     return res
       .status(500)
-      .json({ message: "Failed to save showroom visit." });
+      .json({ success: false, message: "Failed to save showroom visit" });
   }
 };
 
