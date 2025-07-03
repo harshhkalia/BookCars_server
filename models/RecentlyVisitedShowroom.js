@@ -22,22 +22,30 @@ const RecentlyVisitedShowroomSchema = new mongoose.Schema({
   ],
 });
 
+// ✅ Safe + Limited to 5 + Prevent duplicates
 RecentlyVisitedShowroomSchema.methods.addShowroom = async function (ownerId) {
-  const updatedShowrooms = this.visitedShowrooms.filter(
-    (visit) => visit.ownerId.toString() !== ownerId.toString()
-  );
+  try {
+    // ✅ Filter out the showroom if already visited (null-safe)
+    const updatedShowrooms = this.visitedShowrooms.filter(
+      (visit) =>
+        visit?.ownerId?.toString() !== ownerId.toString()
+    );
 
-  updatedShowrooms.unshift({ ownerId });
+    // ✅ Add to top
+    updatedShowrooms.unshift({ ownerId });
 
-  if (updatedShowrooms.length > 5) {
-    updatedShowrooms.pop();
+    // ✅ Keep only latest 5
+    const latestFive = updatedShowrooms.slice(0, 5);
+
+    // ✅ Update and save in DB
+    this.visitedShowrooms = latestFive;
+    await this.save();
+
+    return this;
+  } catch (error) {
+    console.error("Error in addShowroom method:", error);
+    throw error;
   }
-
-  await RecentlyVisitedShowroom.findOneAndUpdate(
-    { _id: this._id },
-    { $set: { visitedShowrooms: updatedShowrooms } },
-    { new: true, useFindAndModify: false }
-  );
 };
 
 const RecentlyVisitedShowroom = mongoose.model(

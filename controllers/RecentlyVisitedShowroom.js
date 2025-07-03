@@ -2,29 +2,33 @@ import RecentlyVisitedShowroom from "../models/RecentlyVisitedShowroom.js";
 
 export const newVisit = async (req, res) => {
   try {
-    const customerId = req.user.userId; 
+    const customerId = req.user.userId;
     const { ownerId } = req.body;
+
+    if (!ownerId) {
+      return res.status(400).json({ message: "Owner ID is required." });
+    }
 
     let showroom = await RecentlyVisitedShowroom.findOne({ customerId });
 
     if (showroom) {
-      await showroom.addShowroom(ownerId);
+      showroom = await showroom.addShowroom(ownerId);
     } else {
       showroom = await RecentlyVisitedShowroom.create({
-        customerId: customerId,
-        visitedShowrooms: [{ ownerId: ownerId }],
+        customerId,
+        visitedShowrooms: [{ ownerId }],
       });
     }
 
     return res.status(200).json({
-      message: "Showroom Visited Successfully",
+      message: "Showroom visit saved successfully.",
       visitedShowrooms: showroom.visitedShowrooms,
     });
   } catch (error) {
     console.error("Failed to save history of visited showroom due to:", error);
     return res
       .status(500)
-      .json({ message: "Failed to save history of visited showroom" });
+      .json({ message: "Failed to save showroom visit." });
   }
 };
 
