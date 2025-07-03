@@ -87,10 +87,11 @@ export const loginUser = async (req, res) => {
 
 export const completeOwnerDetails = async (req, res) => {
   try {
-    const { id, location, companyName } = req.body;
+    const userId = req.user.userId;
+    const { location, companyName } = req.body;
     const showRoomPFP = req.file ? `/ShowroomPFPs/${req.file.filename}` : null;
 
-    const user = await User.findById(id);
+    const user = await User.findById(userId);
     if (!user) {
       return res
         .status(404)
@@ -120,8 +121,15 @@ export const completeOwnerDetails = async (req, res) => {
 
 export const changeUserDetails = async (req, res) => {
   try {
-    const { id, firstName, lastName, password, newLocation, confirmPassword } =
-      req.body;
+    const {
+      firstName,
+      lastName,
+      password,
+      newLocation,
+      confirmPassword,
+    } = req.body;
+
+    const userId = req.user.userId;
 
     const newProfilePic = req.files?.newProfilePic?.[0]?.filename
       ? `/UserPFPs/${req.files.newProfilePic[0].filename}`
@@ -131,12 +139,12 @@ export const changeUserDetails = async (req, res) => {
       ? `/ShowroomPFPs/${req.files.newShowroomCover[0].filename}`
       : undefined;
 
-    const user = await User.findById(id);
+    const user = await User.findById(userId);
 
     if (!user) {
-      return res
-        .status(400)
-        .json({ message: "Failed to find the account related to this user!!" });
+      return res.status(400).json({
+        message: "Failed to find the account related to this user!!",
+      });
     }
 
     const isPasswordMatch = await user.comparePassword(confirmPassword);
@@ -155,21 +163,15 @@ export const changeUserDetails = async (req, res) => {
     if (newProfilePic) user.profilePic = newProfilePic;
 
     const updatedUser = await user.save();
-    if (updatedUser) {
-      return res.status(200).json({
-        message:
-          "The details have been saved successfully, We will reload once to display new changes!!",
-        user: updatedUser,
-      });
-    } else {
-      return res
-        .status(400)
-        .json({ message: "An error occurred while saving your details!!" });
-    }
+    return res.status(200).json({
+      message:
+        "The details have been saved successfully, We will reload once to display new changes!!",
+      user: updatedUser,
+    });
   } catch (error) {
     console.error("Error while changing details of your account:", error);
-    return res
-      .status(500)
-      .json({ message: "An error occurred while saving details you entered." });
+    return res.status(500).json({
+      message: "An error occurred while saving details you entered.",
+    });
   }
 };

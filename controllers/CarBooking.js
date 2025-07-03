@@ -5,7 +5,8 @@ import mongoose from "mongoose";
 
 export const SaveCarBooking = async (req, res) => {
   try {
-    const { customerId, carId, ownerId } = req.query;
+    const customerId = req.user.userId;
+    const { carId, ownerId } = req.query;
     const { bookingContent } = req.body;
 
     const carBooking = await CarBookings.create({
@@ -19,7 +20,7 @@ export const SaveCarBooking = async (req, res) => {
 
     if (savedCarBooking) {
       return res.status(200).json({
-        message: "Your booking has been send to owner successfully!!",
+        message: "Your booking has been sent to owner successfully!!",
         carBooking: savedCarBooking,
       });
     }
@@ -28,7 +29,6 @@ export const SaveCarBooking = async (req, res) => {
 
     if (error.name === "ValidationError") {
       const errors = Object.values(error.errors).map((err) => err.message);
-
       return res.status(400).json({
         message: "Validation failed due to some errors.",
         errors,
@@ -43,7 +43,7 @@ export const SaveCarBooking = async (req, res) => {
 
 export const fetchAllPendingBookingsForOwner = async (req, res) => {
   try {
-    const { ownerId } = req.query;
+    const ownerId = req.user.userId;
 
     const carBookings = await CarBookings.find({
       ownerId: ownerId,
@@ -94,8 +94,8 @@ export const fetchAllPendingBookingsForOwner = async (req, res) => {
 
 export const changeBookingStatusToComplete = async (req, res) => {
   try {
-    const { bookingId, carId } = req.query;
-    const { ownerReplyToCustomer } = req.body;
+    const { bookingId, carId, ownerReplyToCustomer } = req.body;
+    const ownerId = req.user.userId;
 
     if (!ownerReplyToCustomer || ownerReplyToCustomer.trim().length < 5) {
       return res
@@ -106,6 +106,10 @@ export const changeBookingStatusToComplete = async (req, res) => {
     const booking = await CarBookings.findById(bookingId);
     if (!booking) {
       return res.status(404).json({ message: "Booking not found!" });
+    }
+
+    if (booking.ownerId.toString() !== ownerId) {
+      return res.status(403).json({ message: "Unauthorized access!" });
     }
 
     const car = await Car.findById(carId);
@@ -141,38 +145,42 @@ export const changeBookingStatusToComplete = async (req, res) => {
   }
 };
 
-export const rejectPendingBooking = async (req, res) => {
+export const changeBookingStatusToReject = async (req, res) => {
   try {
-    const { bookingId } = req.query;
-    const { reasonforRejection } = req.body;
+    const { bookingId, reasonforRejection } = req.body;
 
-    if (!reasonforRejection || reasonforRejection.trim().length < 5) {
+    if (!bookingId || !reasonforRejection || reasonforRejection.trim().length < 5) {
       return res.status(400).json({
-        message: "Reason for rejection must be at least 5 characters long.",
+        message: "Booking ID and valid rejection reason (min 5 characters) are required.",
       });
     }
 
     const booking = await CarBookings.findById(bookingId);
     if (!booking) {
-      return res.status(400).json({ message: "Booking not found!!" });
+      return res.status(404).json({ message: "Booking not found!" });
     }
+
     booking.bookingStatus = "Rejected";
-    booking.whyRejected = reasonforRejection;
+    booking.ownerReplyToBooking = reasonforRejection;
+    booking.ownerReplyToBookingDate = new Date();
     await booking.save();
-    return res
-      .status(200)
-      .json({ message: "Booking has been rejected successfully!!", booking });
+
+    return res.status(200).json({
+      message: "Booking has been rejected successfully.",
+      booking,
+    });
   } catch (error) {
-    console.error("Failed to reject booking due to:", error);
-    return res
-      .status(500)
-      .json({ message: "Failed to reject booking, please try again!!" });
+    console.error("Error while rejecting booking:", error);
+    return res.status(500).json({
+      message: "Something went wrong. Unable to reject the booking.",
+      error: error.message,
+    });
   }
 };
 
 export const fetchCompletedBookingsForOwner = async (req, res) => {
   try {
-    const { ownerId } = req.query;
+    const ownerId = req.user.userId;
 
     const carBookings = await CarBookings.find({
       ownerId: ownerId,
@@ -188,18 +196,11 @@ export const fetchCompletedBookingsForOwner = async (req, res) => {
     const bookingsWithDetails = await Promise.all(
       carBookings.map(async (booking) => {
         const customer = await User.findById(booking.customerId);
-        if (!customer) {
-          return res.status(400).json({ message: "Customer not found!!" });
-        }
-
         const owner = await User.findById(booking.ownerId);
-        if (!owner) {
-          return res.status(400).json({ message: "Owner not found!!" });
-        }
-
         const car = await Car.findById(booking.carId);
-        if (!car) {
-          return res.status(400).json({ message: "Car not found!!" });
+
+        if (!customer || !owner || !car) {
+          return null;
         }
 
         return {
@@ -217,10 +218,12 @@ export const fetchCompletedBookingsForOwner = async (req, res) => {
       })
     );
 
-    return res.status(200).json({ bookings: bookingsWithDetails });
+    return res.status(200).json({
+      bookings: bookingsWithDetails.filter(Boolean),
+    });
   } catch (error) {
     console.error(
-      "Failed to fetch all completed bookings for owner due to : ",
+      "Failed to fetch all completed bookings for owner due to: ",
       error
     );
     return res
@@ -231,6 +234,7 @@ export const fetchCompletedBookingsForOwner = async (req, res) => {
 
 export const fetchSpecificCarPendingDetails = async (req, res) => {
   try {
+    const ownerId = req.user.userId;
     const { carId } = req.query;
 
     if (!carId || !mongoose.Types.ObjectId.isValid(carId)) {
@@ -240,38 +244,36 @@ export const fetchSpecificCarPendingDetails = async (req, res) => {
     }
 
     const bookings = await CarBookings.find({
-      carId: carId,
+      carId,
+      ownerId,
       bookingStatus: "Pending",
     });
+
+    if (!bookings.length) {
+      return res
+        .status(404)
+        .json({ message: "No pending bookings found for this car!!" });
+    }
 
     const bookingsWithDetails = await Promise.all(
       bookings.map(async (booking) => {
         const customer = await User.findById(booking.customerId);
-        if (!customer) {
-          return res.status(400).json({ message: "Customer not found!!" });
-        }
+        if (!customer) return null;
 
         return {
           ...booking.toObject(),
           customerPFP: customer.profilePic || null,
           customerEmail: customer.email,
-          customerName: customer.firstName + " " + customer.lastName,
+          customerName: `${customer.firstName} ${customer.lastName}`,
         };
       })
     );
 
-    if (bookings.length > 0) {
-      return res.status(200).json({ bookings: bookingsWithDetails });
-    } else {
-      return res
-        .status(404)
-        .json({ message: "No pending bookings found for this car!!" });
-    }
+    return res
+      .status(200)
+      .json({ bookings: bookingsWithDetails.filter(Boolean) });
   } catch (error) {
-    console.error(
-      "Failed to fetch pending bookings for this car due to : ",
-      error
-    );
+    console.error("Failed to fetch pending bookings for this car due to:", error);
     return res
       .status(500)
       .json({ message: "Failed to fetch pending bookings for this car!!" });
@@ -280,29 +282,28 @@ export const fetchSpecificCarPendingDetails = async (req, res) => {
 
 export const fetchPendingBookingsForOtherCars = async (req, res) => {
   try {
-    const { carId, ownerId } = req.query;
+    const ownerId = req.user.userId; 
+    const { carId } = req.query;
+
     const bookings = await CarBookings.find({
-      ownerId: ownerId,
+      ownerId,
       bookingStatus: "Pending",
-      carId: { $not: { $eq: carId } },
+      carId: { $ne: carId }, 
     });
+
     const bookingsWithDetails = await Promise.all(
       bookings.map(async (booking) => {
         const customer = await User.findById(booking.customerId);
-        if (!customer) {
-          return res.status(400).json({ message: "Customer not found!!" });
-        }
+        if (!customer) return null;
 
         const car = await Car.findById(booking.carId);
-        if (!car) {
-          return res.status(400).json({ message: "Car not found!!" });
-        }
+        if (!car) return null;
 
         return {
           ...booking.toObject(),
           customerPFP: customer.profilePic || null,
           customerEmail: customer.email,
-          customerName: customer.firstName + " " + customer.lastName,
+          customerName: `${customer.firstName} ${customer.lastName}`,
           carPFP: car.carImages || null,
           carName: car.modelName,
           carCount: car.carsCount,
@@ -311,25 +312,32 @@ export const fetchPendingBookingsForOtherCars = async (req, res) => {
       })
     );
 
-    if (bookingsWithDetails.length > 0) {
-      return res.status(200).json({ bookings: bookingsWithDetails });
+    const validBookings = bookingsWithDetails.filter(Boolean); 
+
+    if (validBookings.length > 0) {
+      return res.status(200).json({ bookings: validBookings });
+    } else {
+      return res
+        .status(404)
+        .json({ message: "No pending bookings for other cars found!" });
     }
   } catch (error) {
     console.error(
-      "Failed to get pending bookings for other cars due to : ",
+      "Failed to get pending bookings for other cars due to: ",
       error
     );
-    return res
-      .status(500)
-      .json({ message: "Failed to get pending bookings for other cars!!" });
+    return res.status(500).json({
+      message: "Failed to get pending bookings for other cars!!",
+    });
   }
 };
 
 export const fetchPendingBookingsForCustomer = async (req, res) => {
   try {
-    const { customerId } = req.query;
+    const customerId = req.user.userId; // ✅ Extract from JWT payload
+
     const bookings = await CarBookings.find({
-      customerId: customerId,
+      customerId,
       bookingStatus: "Pending",
     });
 
@@ -354,14 +362,14 @@ export const fetchPendingBookingsForCustomer = async (req, res) => {
           ...booking.toObject(),
           customerPFP: customer.profilePic || null,
           customerEmail: customer.email,
-          customerName: customer.firstName + " " + customer.lastName,
+          customerName: `${customer.firstName} ${customer.lastName}`,
           carPFP: car.carImages || null,
           carName: car.modelName,
           carCount: car.carsCount,
           carPrice: car.price,
           ownerPFP: owner.profilePic || null,
           ownerEmail: owner.email,
-          ownerName: owner.firstName + " " + owner.lastName,
+          ownerName: `${owner.firstName} ${owner.lastName}`,
         };
       })
     );
@@ -383,9 +391,10 @@ export const fetchPendingBookingsForCustomer = async (req, res) => {
 
 export const fetchAcceptedBookingsForCustomer = async (req, res) => {
   try {
-    const { customerId } = req.query;
+    const customerId = req.user.userId; // ✅ Extracted from JWT
+
     const bookings = await CarBookings.find({
-      customerId: customerId,
+      customerId,
       bookingStatus: "Accepted",
     });
 
@@ -410,14 +419,14 @@ export const fetchAcceptedBookingsForCustomer = async (req, res) => {
           ...booking.toObject(),
           customerPFP: customer.profilePic || null,
           customerEmail: customer.email,
-          customerName: customer.firstName + " " + customer.lastName,
+          customerName: `${customer.firstName} ${customer.lastName}`,
           carPFP: car.carImages || null,
           carName: car.modelName,
           carCount: car.carsCount,
           carPrice: car.price,
           ownerPFP: owner.profilePic || null,
           ownerEmail: owner.email,
-          ownerName: owner.firstName + " " + owner.lastName,
+          ownerName: `${owner.firstName} ${owner.lastName}`,
         };
       })
     );
@@ -425,23 +434,24 @@ export const fetchAcceptedBookingsForCustomer = async (req, res) => {
     if (bookingsWithDetails.length > 0) {
       return res.status(200).json({ bookings: bookingsWithDetails });
     } else {
-      return res
-        .status(404)
-        .json({ message: "No accepted bookings found for this customer!!" });
+      return res.status(404).json({
+        message: "No accepted bookings found for this customer!!",
+      });
     }
   } catch (error) {
     console.error(error);
-    return res
-      .status(500)
-      .json({ message: "Failed to get accepted bookings for customer!!" });
+    return res.status(500).json({
+      message: "Failed to get accepted bookings for customer!!",
+    });
   }
 };
 
 export const fetchRejectedBookingsForCustomer = async (req, res) => {
   try {
-    const { customerId } = req.query;
+    const customerId = req.user.userId; // ✅ Extracted from JWT token
+
     const bookings = await CarBookings.find({
-      customerId: customerId,
+      customerId,
       bookingStatus: "Rejected",
     });
 
@@ -466,14 +476,14 @@ export const fetchRejectedBookingsForCustomer = async (req, res) => {
           ...booking.toObject(),
           customerPFP: customer.profilePic || null,
           customerEmail: customer.email,
-          customerName: customer.firstName + " " + customer.lastName,
+          customerName: `${customer.firstName} ${customer.lastName}`,
           carPFP: car.carImages || null,
           carName: car.modelName,
           carCount: car.carsCount,
           carPrice: car.price,
           ownerPFP: owner.profilePic || null,
           ownerEmail: owner.email,
-          ownerName: owner.firstName + " " + owner.lastName,
+          ownerName: `${owner.firstName} ${owner.lastName}`,
         };
       })
     );
@@ -481,14 +491,14 @@ export const fetchRejectedBookingsForCustomer = async (req, res) => {
     if (bookingsWithDetails.length > 0) {
       return res.status(200).json({ bookings: bookingsWithDetails });
     } else {
-      return res
-        .status(404)
-        .json({ message: "No Rejected bookings found for this customer!!" });
+      return res.status(404).json({
+        message: "No Rejected bookings found for this customer!!",
+      });
     }
   } catch (error) {
     console.error(error);
-    return res
-      .status(500)
-      .json({ message: "Failed to get Rejected bookings for customer!!" });
+    return res.status(500).json({
+      message: "Failed to get Rejected bookings for customer!!",
+    });
   }
 };

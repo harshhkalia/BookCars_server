@@ -4,7 +4,6 @@ import User from "../models/User.js";
 export const createCar = async (req, res) => {
   try {
     const {
-      id,
       modelName,
       engineType,
       carPrice,
@@ -16,7 +15,9 @@ export const createCar = async (req, res) => {
       emiCount,
       carsCount,
     } = req.body;
+
     const carImages = req.files.map((file) => `/CarImages/${file.filename}`);
+    const userId = req.user.userId;
 
     if (carImages.length > 4) {
       return res
@@ -24,7 +25,7 @@ export const createCar = async (req, res) => {
         .json({ message: "You can upload maximum 4 images" });
     }
 
-    const checkCarLimitation = await Car.find({ ownerId: id });
+    const checkCarLimitation = await Car.find({ ownerId: userId });
     if (checkCarLimitation.length >= 5) {
       return res
         .status(400)
@@ -32,7 +33,7 @@ export const createCar = async (req, res) => {
     }
 
     const newCar = await Car.create({
-      ownerId: id,
+      ownerId: userId,
       modelName: modelName,
       engineType: engineType,
       price: carPrice,
@@ -66,8 +67,8 @@ export const createCar = async (req, res) => {
 
 export const getMyCars = async (req, res) => {
   try {
-    const id = req.params.id;
-    const cars = await Car.find({ ownerId: id });
+    const userId = req.user.userId;
+    const cars = await Car.find({ ownerId: userId });
     if (cars.length > 0) {
       return res.status(200).json({ cars });
     } else {
@@ -85,7 +86,10 @@ export const getMyCars = async (req, res) => {
 
 export const updateCar = async (req, res) => {
   try {
-    const { carId, carPrice, carCount, carDescription } = req.body;
+    const { carPrice, carCount, carDescription } = req.body;
+    const userId = req.user.userId;
+    const carId = req.body.carId;
+
     const carImages = req.files.map((file) => `/CarImages/${file.filename}`);
 
     if (carImages.length > 4) {
@@ -94,10 +98,10 @@ export const updateCar = async (req, res) => {
         .json({ message: "You can upload maximum 4 images" });
     }
 
-    const car = await Car.findById(carId);
+    const car = await Car.findOne({ _id: carId, ownerId: userId });
     if (!car) {
       return res.status(400).json({
-        message: "The car you are looking to update does available here!!",
+        message: "The car you're trying to update doesn't exist or is not yours!",
       });
     }
 
@@ -105,51 +109,49 @@ export const updateCar = async (req, res) => {
     if (carCount) car.carsCount = carCount;
     if (carDescription) car.description = carDescription;
     if (carImages.length > 0) car.carImages = carImages;
-    const updateCar = await car.save();
-    if (updateCar) {
-      return res.status(200).json({
-        message:
-          "This car details has been updated successfully, we will reload page once to ensure the changes!!",
-        car: updateCar,
-      });
-    } else {
-      return res.status(400).json({
-        message: "An error occurred while updating your car details!!",
-      });
-    }
+
+    const updatedCar = await car.save();
+    return res.status(200).json({
+      message:
+        "This car's details have been updated successfully! We'll reload the page to reflect the changes.",
+      car: updatedCar,
+    });
   } catch (error) {
     console.error("Error updating the car details:", error);
     return res.status(500).json({
-      message: "Error updating details of selected car, please try again!!",
+      message: "Something went wrong while updating the car. Please try again!",
     });
   }
 };
 
 export const deleteCar = async (req, res) => {
   try {
-    const { id } = req.params;
-    const car = await Car.findById(id);
+    const carId = req.params.id;
+    const userId = req.user.userId;
+
+    const car = await Car.findOne({ _id: carId, ownerId: userId });
     if (!car) {
       return res.status(400).json({
-        message: "The car you are looking to delete does not exist!!",
+        message: "This car does not exist or you are not authorized to delete it!",
       });
     }
-    const deletedCar = await Car.findByIdAndDelete(id);
+
+    const deletedCar = await Car.findByIdAndDelete(carId);
     if (deletedCar) {
       return res.status(200).json({
         message:
-          "The car has been deleted successfully and it's all data will be erased. We will refresh the page once to ensure the changes!!",
+          "The car has been deleted successfully and its data erased. We will refresh the page once to ensure the changes!",
       });
     } else {
       return res
         .status(400)
-        .json({ message: "An error occurred while deleting your car!!" });
+        .json({ message: "An error occurred while deleting your car!" });
     }
   } catch (error) {
     console.error("Error deleting the car:", error);
     return res
       .status(500)
-      .json({ message: "An error occurred while deleting your car!!" });
+      .json({ message: "An error occurred while deleting your car!" });
   }
 };
 

@@ -2,7 +2,7 @@ import RecentlyVisitedShowroom from "../models/RecentlyVisitedShowroom.js";
 
 export const newVisit = async (req, res) => {
   try {
-    const { customerId } = req.query;
+    const customerId = req.user.userId; 
     const { ownerId } = req.body;
 
     let showroom = await RecentlyVisitedShowroom.findOne({ customerId });
@@ -30,13 +30,15 @@ export const newVisit = async (req, res) => {
 
 export const getMyAllVisits = async (req, res) => {
   try {
-    const { customerId } = req.query;
+    const customerId = req.user.userId;
+
     const visitedShowrooms = await RecentlyVisitedShowroom.findOne({
       customerId,
     }).populate({
       path: "visitedShowrooms.ownerId",
       select: "email firstName lastName profilePic showroomDetails",
     });
+
     return res.status(200).json({ visitedShowrooms });
   } catch (error) {
     console.error("Failed to fetch history of visited showroom due to:", error);
@@ -48,7 +50,8 @@ export const getMyAllVisits = async (req, res) => {
 
 export const deleteMyOneVisit = async (req, res) => {
   try {
-    const { customerId, ownerId } = req.query;
+    const customerId = req.user.userId;
+    const { ownerId } = req.query;
 
     const showroom = await RecentlyVisitedShowroom.findOne({
       customerId,

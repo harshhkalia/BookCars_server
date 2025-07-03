@@ -37,7 +37,7 @@ import {
   fetchPendingBookingsForOtherCars,
   fetchRejectedBookingsForCustomer,
   fetchSpecificCarPendingDetails,
-  rejectPendingBooking,
+  changeBookingStatusToReject,
   SaveCarBooking,
 } from "./controllers/CarBooking.js";
 import { verifyToken } from "./middleware/authMiddleware.js";
@@ -98,7 +98,7 @@ app.put(
 app.post("/addNewCar", uploadCarImages.array("carImages"),verifyToken, createCar);
 
 // get all cars related to my showroom
-app.get("/getMineCars/:id", verifyToken, getMyCars);
+app.get("/getMineCars", verifyToken, getMyCars);
 
 // change details of user profile
 app.put(
@@ -158,7 +158,7 @@ app.get("/owner/fetchPBuserdetails", fetchPendingBookingUserData);
 app.put("/owner/acceptCustomerPB", verifyToken, changeBookingStatusToComplete);
 
 // reject a booking of customer
-app.put("/owner/rejectCustomerPB", verifyToken, rejectPendingBooking);
+app.put("/owner/rejectCustomerPB", verifyToken, changeBookingStatusToReject);
 
 // get all bookings for owner that are completed
 app.get(
