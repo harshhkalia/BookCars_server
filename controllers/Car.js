@@ -84,6 +84,23 @@ export const getMyCars = async (req, res) => {
   }
 };
 
+export const fetchCarsByOwnerId = async (req, res) => {
+  try {
+    const { ownerId } = req.params;
+
+    const cars = await Car.find({ ownerId });
+
+    if (cars.length > 0) {
+      return res.status(200).json({ cars });
+    } else {
+      return res.status(404).json({ message: "No cars found for this showroom!" });
+    }
+  } catch (error) {
+    console.error("Error fetching showroom cars:", error);
+    return res.status(500).json({ message: "Failed to fetch cars for this showroom." });
+  }
+};
+
 export const updateCar = async (req, res) => {
   try {
     const { carPrice, carCount, carDescription } = req.body;

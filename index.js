@@ -16,6 +16,7 @@ import uploadCarImages from "./configs/CarImages.js";
 import {
   createCar,
   deleteCar,
+  fetchCarsByOwnerId,
   fetchPendingBookingUserData,
   getAllShowrooms,
   getMyCars,
@@ -192,3 +193,5 @@ app.get(
   "/customer/fetchRejectedBookingsForCustomer",verifyToken,
   fetchRejectedBookingsForCustomer
 );
+
+app.get("/showroom/:ownerId/cars", fetchCarsByOwnerId);
