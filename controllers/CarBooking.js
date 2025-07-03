@@ -161,7 +161,7 @@ export const changeBookingStatusToReject = async (req, res) => {
     }
 
     booking.bookingStatus = "Rejected";
-    booking.ownerReplyToBooking = reasonforRejection;
+    booking.whyRejected = reasonforRejection;
     booking.ownerReplyToBookingDate = new Date();
     await booking.save();
 
