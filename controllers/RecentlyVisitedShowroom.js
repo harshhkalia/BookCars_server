@@ -1,4 +1,5 @@
 import RecentlyVisitedShowroom from "../models/RecentlyVisitedShowroom.js";
+import mongoose from "mongoose";
 
 export const newVisit = async (req, res) => {
   try {

@@ -255,67 +255,65 @@ export const fetchSpecificCarPendingDetails = async (req, res) => {
         .json({ message: "No pending bookings found for this car!!" });
     }
 
-    const bookingsWithDetails = await Promise.all(
-      bookings.map(async (booking) => {
-        const customer = await User.findById(booking.customerId);
-        if (!customer) return null;
+    const bookingsWithDetails = [];
 
-        return {
-          ...booking.toObject(),
-          customerPFP: customer.profilePic || null,
-          customerEmail: customer.email,
-          customerName: `${customer.firstName} ${customer.lastName}`,
-        };
-      })
-    );
+    for (const booking of bookings) {
+      const customer = await User.findById(booking.customerId);
+      if (!customer) continue; // Skip if customer not found
 
-    return res
-      .status(200)
-      .json({ bookings: bookingsWithDetails.filter(Boolean) });
+      bookingsWithDetails.push({
+        ...booking.toObject(),
+        customerPFP: customer.profilePic || null,
+        customerEmail: customer.email,
+        customerName: `${customer.firstName} ${customer.lastName}`,
+      });
+    }
+
+    return res.status(200).json({ bookings: bookingsWithDetails });
   } catch (error) {
-    console.error("Failed to fetch pending bookings for this car due to:", error);
-    return res
-      .status(500)
-      .json({ message: "Failed to fetch pending bookings for this car!!" });
+    console.error(
+      "Failed to fetch pending bookings for this car due to:",
+      error
+    );
+    return res.status(500).json({
+      message: "Failed to fetch pending bookings for this car!!",
+    });
   }
 };
 
 export const fetchPendingBookingsForOtherCars = async (req, res) => {
   try {
-    const ownerId = req.user.userId; 
+    const ownerId = req.user.userId;
     const { carId } = req.query;
 
     const bookings = await CarBookings.find({
       ownerId,
       bookingStatus: "Pending",
-      carId: { $ne: carId }, 
+      carId: { $ne: carId },
     });
 
-    const bookingsWithDetails = await Promise.all(
-      bookings.map(async (booking) => {
-        const customer = await User.findById(booking.customerId);
-        if (!customer) return null;
+    const bookingsWithDetails = [];
 
-        const car = await Car.findById(booking.carId);
-        if (!car) return null;
+    for (const booking of bookings) {
+      const customer = await User.findById(booking.customerId);
+      const car = await Car.findById(booking.carId);
 
-        return {
-          ...booking.toObject(),
-          customerPFP: customer.profilePic || null,
-          customerEmail: customer.email,
-          customerName: `${customer.firstName} ${customer.lastName}`,
-          carPFP: car.carImages || null,
-          carName: car.modelName,
-          carCount: car.carsCount,
-          carPrice: car.price,
-        };
-      })
-    );
+      if (!customer || !car) continue; // Skip if either is missing
 
-    const validBookings = bookingsWithDetails.filter(Boolean); 
+      bookingsWithDetails.push({
+        ...booking.toObject(),
+        customerPFP: customer.profilePic || null,
+        customerEmail: customer.email,
+        customerName: `${customer.firstName} ${customer.lastName}`,
+        carPFP: car.carImages || null,
+        carName: car.modelName,
+        carCount: car.carsCount,
+        carPrice: car.price,
+      });
+    }
 
-    if (validBookings.length > 0) {
-      return res.status(200).json({ bookings: validBookings });
+    if (bookingsWithDetails.length > 0) {
+      return res.status(200).json({ bookings: bookingsWithDetails });
     } else {
       return res
         .status(404)
@@ -334,45 +332,37 @@ export const fetchPendingBookingsForOtherCars = async (req, res) => {
 
 export const fetchPendingBookingsForCustomer = async (req, res) => {
   try {
-    const customerId = req.user.userId; // ✅ Extract from JWT payload
+    const customerId = req.user.userId; // ✅ From JWT token
 
     const bookings = await CarBookings.find({
       customerId,
       bookingStatus: "Pending",
     });
 
-    const bookingsWithDetails = await Promise.all(
-      bookings.map(async (booking) => {
-        const customer = await User.findById(booking.customerId);
-        if (!customer) {
-          return res.status(400).json({ message: "Customer not found!!" });
-        }
+    const bookingsWithDetails = [];
 
-        const car = await Car.findById(booking.carId);
-        if (!car) {
-          return res.status(400).json({ message: "Car not found!!" });
-        }
+    for (const booking of bookings) {
+      const customer = await User.findById(booking.customerId);
+      const car = await Car.findById(booking.carId);
+      const owner = await User.findById(booking.ownerId);
 
-        const owner = await User.findById(booking.ownerId);
-        if (!owner) {
-          return res.status(400).json({ message: "Owner not found!!" });
-        }
+      // Skip this booking if any detail is missing
+      if (!customer || !car || !owner) continue;
 
-        return {
-          ...booking.toObject(),
-          customerPFP: customer.profilePic || null,
-          customerEmail: customer.email,
-          customerName: `${customer.firstName} ${customer.lastName}`,
-          carPFP: car.carImages || null,
-          carName: car.modelName,
-          carCount: car.carsCount,
-          carPrice: car.price,
-          ownerPFP: owner.profilePic || null,
-          ownerEmail: owner.email,
-          ownerName: `${owner.firstName} ${owner.lastName}`,
-        };
-      })
-    );
+      bookingsWithDetails.push({
+        ...booking.toObject(),
+        customerPFP: customer.profilePic || null,
+        customerEmail: customer.email,
+        customerName: `${customer.firstName} ${customer.lastName}`,
+        carPFP: car.carImages || null,
+        carName: car.modelName,
+        carCount: car.carsCount,
+        carPrice: car.price,
+        ownerPFP: owner.profilePic || null,
+        ownerEmail: owner.email,
+        ownerName: `${owner.firstName} ${owner.lastName}`,
+      });
+    }
 
     if (bookingsWithDetails.length > 0) {
       return res.status(200).json({ bookings: bookingsWithDetails });
@@ -382,7 +372,7 @@ export const fetchPendingBookingsForCustomer = async (req, res) => {
         .json({ message: "No pending bookings found for this customer!!" });
     }
   } catch (error) {
-    console.error(error);
+    console.error("Error in fetchPendingBookingsForCustomer:", error);
     return res
       .status(500)
       .json({ message: "Failed to get pending bookings for customer!!" });
@@ -398,38 +388,30 @@ export const fetchAcceptedBookingsForCustomer = async (req, res) => {
       bookingStatus: "Accepted",
     });
 
-    const bookingsWithDetails = await Promise.all(
-      bookings.map(async (booking) => {
-        const customer = await User.findById(booking.customerId);
-        if (!customer) {
-          return res.status(400).json({ message: "Customer not found!!" });
-        }
+    const bookingsWithDetails = [];
 
-        const car = await Car.findById(booking.carId);
-        if (!car) {
-          return res.status(400).json({ message: "Car not found!!" });
-        }
+    for (const booking of bookings) {
+      const customer = await User.findById(booking.customerId);
+      const car = await Car.findById(booking.carId);
+      const owner = await User.findById(booking.ownerId);
 
-        const owner = await User.findById(booking.ownerId);
-        if (!owner) {
-          return res.status(400).json({ message: "Owner not found!!" });
-        }
+      // Skip this booking if any of the required data is missing
+      if (!customer || !car || !owner) continue;
 
-        return {
-          ...booking.toObject(),
-          customerPFP: customer.profilePic || null,
-          customerEmail: customer.email,
-          customerName: `${customer.firstName} ${customer.lastName}`,
-          carPFP: car.carImages || null,
-          carName: car.modelName,
-          carCount: car.carsCount,
-          carPrice: car.price,
-          ownerPFP: owner.profilePic || null,
-          ownerEmail: owner.email,
-          ownerName: `${owner.firstName} ${owner.lastName}`,
-        };
-      })
-    );
+      bookingsWithDetails.push({
+        ...booking.toObject(),
+        customerPFP: customer.profilePic || null,
+        customerEmail: customer.email,
+        customerName: `${customer.firstName} ${customer.lastName}`,
+        carPFP: car.carImages || null,
+        carName: car.modelName,
+        carCount: car.carsCount,
+        carPrice: car.price,
+        ownerPFP: owner.profilePic || null,
+        ownerEmail: owner.email,
+        ownerName: `${owner.firstName} ${owner.lastName}`,
+      });
+    }
 
     if (bookingsWithDetails.length > 0) {
       return res.status(200).json({ bookings: bookingsWithDetails });
@@ -439,7 +421,7 @@ export const fetchAcceptedBookingsForCustomer = async (req, res) => {
       });
     }
   } catch (error) {
-    console.error(error);
+    console.error("Error in fetchAcceptedBookingsForCustomer:", error);
     return res.status(500).json({
       message: "Failed to get accepted bookings for customer!!",
     });
@@ -448,45 +430,37 @@ export const fetchAcceptedBookingsForCustomer = async (req, res) => {
 
 export const fetchRejectedBookingsForCustomer = async (req, res) => {
   try {
-    const customerId = req.user.userId; // ✅ Extracted from JWT token
+    const customerId = req.user.userId; // ✅ From token
 
     const bookings = await CarBookings.find({
       customerId,
       bookingStatus: "Rejected",
     });
 
-    const bookingsWithDetails = await Promise.all(
-      bookings.map(async (booking) => {
-        const customer = await User.findById(booking.customerId);
-        if (!customer) {
-          return res.status(400).json({ message: "Customer not found!!" });
-        }
+    const bookingsWithDetails = [];
 
-        const car = await Car.findById(booking.carId);
-        if (!car) {
-          return res.status(400).json({ message: "Car not found!!" });
-        }
+    for (const booking of bookings) {
+      const customer = await User.findById(booking.customerId);
+      const car = await Car.findById(booking.carId);
+      const owner = await User.findById(booking.ownerId);
 
-        const owner = await User.findById(booking.ownerId);
-        if (!owner) {
-          return res.status(400).json({ message: "Owner not found!!" });
-        }
+      // Skip this booking if any data is missing
+      if (!customer || !car || !owner) continue;
 
-        return {
-          ...booking.toObject(),
-          customerPFP: customer.profilePic || null,
-          customerEmail: customer.email,
-          customerName: `${customer.firstName} ${customer.lastName}`,
-          carPFP: car.carImages || null,
-          carName: car.modelName,
-          carCount: car.carsCount,
-          carPrice: car.price,
-          ownerPFP: owner.profilePic || null,
-          ownerEmail: owner.email,
-          ownerName: `${owner.firstName} ${owner.lastName}`,
-        };
-      })
-    );
+      bookingsWithDetails.push({
+        ...booking.toObject(),
+        customerPFP: customer.profilePic || null,
+        customerEmail: customer.email,
+        customerName: `${customer.firstName} ${customer.lastName}`,
+        carPFP: car.carImages || null,
+        carName: car.modelName,
+        carCount: car.carsCount,
+        carPrice: car.price,
+        ownerPFP: owner.profilePic || null,
+        ownerEmail: owner.email,
+        ownerName: `${owner.firstName} ${owner.lastName}`,
+      });
+    }
 
     if (bookingsWithDetails.length > 0) {
       return res.status(200).json({ bookings: bookingsWithDetails });
@@ -496,7 +470,7 @@ export const fetchRejectedBookingsForCustomer = async (req, res) => {
       });
     }
   } catch (error) {
-    console.error(error);
+    console.error("Error in fetchRejectedBookingsForCustomer:", error);
     return res.status(500).json({
       message: "Failed to get Rejected bookings for customer!!",
     });
