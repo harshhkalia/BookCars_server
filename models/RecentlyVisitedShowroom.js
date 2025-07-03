@@ -25,23 +25,30 @@ const RecentlyVisitedShowroomSchema = new mongoose.Schema({
 // Safe + Limited to 5 + Prevent duplicates
 RecentlyVisitedShowroomSchema.methods.addShowroom = async function (ownerId) {
   try {
-    // Filter out the showroom if already visited (null-safe)
-    const updatedShowrooms = this.visitedShowrooms.filter(
-      (visit) =>
-        visit?.ownerId?.toString() !== ownerId.toString()
+    // Re-fetch the latest version of the document to avoid version conflicts
+    const latestDoc = await mongoose
+      .model("RecentlyVisitedShowroom")
+      .findById(this._id);
+
+    if (!latestDoc) {
+      throw new Error("RecentlyVisitedShowroom document not found.");
+    }
+
+    // Remove any existing visit to the same showroom (prevent duplicates)
+    const filtered = latestDoc.visitedShowrooms.filter(
+      (visit) => visit?.ownerId?.toString() !== ownerId.toString()
     );
 
-    // Add to top
-    updatedShowrooms.unshift({ ownerId });
+    // Add the new showroom visit at the beginning
+    filtered.unshift({ ownerId });
 
-    // Keep only latest 5
-    const latestFive = updatedShowrooms.slice(0, 5);
+    // Limit to last 5 visits
+    latestDoc.visitedShowrooms = filtered.slice(0, 5);
 
-    // Update and save in DB
-    this.visitedShowrooms = latestFive;
-    await this.save();
+    // Save updated doc
+    await latestDoc.save();
 
-    return this;
+    return latestDoc;
   } catch (error) {
     console.error("Error in addShowroom method:", error);
     throw error;
